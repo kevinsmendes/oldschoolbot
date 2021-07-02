@@ -33,6 +33,11 @@ export default class extends BotCommand {
 			);
 		}
 
+		if (currentTask.type === Activity.Lfg) {
+			return msg.send(`${msg.author.minionName} is in a group trip, their team wouldn't like it if they left!`);
+		}
+
+		if (currentTask.type === Activity.GroupMonsterKilling) {
 		if (currentTask.type === Activity.GroupMonsterKilling || currentTask.type === Activity.Dungeoneering) {
 			return msg.send(
 				`${msg.author.minionName} is in a group PVM trip, their team wouldn't like it if they left!`
@@ -83,7 +88,7 @@ export default class extends BotCommand {
 			const data = currentTask as RaidsActivityTaskOptions;
 			if (data.users.length > 1) {
 				return msg.send(
-					`${msg.author.minionName} is currently doing the Chamber's of Xeric, they cannot leave their team!`
+					`${msg.author.minionName} is currently doing the Chambers of Xeric, they cannot leave their team!`
 				);
 			}
 		}
