@@ -12,11 +12,11 @@ import {
 	hasMinRaidsRequirements,
 	minimumCoxSuppliesNeeded
 } from '../../data/cox';
-import { ClientSettings } from '../../settings/types/ClientSettings';
+import { getRandomMysteryBox } from '../../data/openables';
 import { UserSettings } from '../../settings/types/UserSettings';
 import { SkillsEnum } from '../../skilling/types';
-import { ActivityTaskOptions, GroupMonsterActivityTaskOptions, RaidsTaskOptions } from '../../types/minions';
-import { addBanks, filterBankFromArrayOfItems, roll } from '../../util';
+import { ActivityTaskOptions, RaidsOptions } from '../../types/minions';
+import { filterBankFromArrayOfItems, roll } from '../../util';
 import { formatOrdinal } from '../../util/formatOrdinal';
 import itemID from '../../util/itemID';
 import resolveItems from '../../util/resolveItems';
@@ -32,7 +32,7 @@ import LfgInterface, {
 } from '../LfgInterface';
 
 export default class implements LfgInterface {
-	activity: ActivityTaskOptions = <RaidsTaskOptions>{ type: Activity.Raids };
+	activity: ActivityTaskOptions = <RaidsOptions>{ type: Activity.Raids };
 
 	notPurple = resolveItems(['Torn prayer scroll', 'Dark relic']);
 	greenItems = resolveItems(['Twisted ancestral colour kit']);
@@ -41,7 +41,7 @@ export default class implements LfgInterface {
 	purpleItems = [...Object.values(coxLog), ...metamorphPets].flat(2).filter(i => !this.notPurple.includes(i));
 
 	async HandleTripFinish(params: LfgHandleTripFinish): Promise<LfgHandleTripFinishReturn> {
-		const { users, duration } = <GroupMonsterActivityTaskOptions>params.data;
+		const { users, duration } = <RaidsOptions>params.data;
 		const { queue, client } = params;
 
 		const challengeMode = queue.extraParams!.isChallengeMode ?? false;
@@ -89,6 +89,12 @@ export default class implements LfgInterface {
 			);
 
 			const userLoot = new Bank(_userLoot);
+			if (roll(10)) {
+				userLoot.multiply(2);
+				userLoot.add(getRandomMysteryBox());
+			} else if (user.usingPet('Flappy')) {
+				userLoot.multiply(2);
+			}
 			if (
 				challengeMode &&
 				roll(50) &&
@@ -99,6 +105,16 @@ export default class implements LfgInterface {
 				if (unownedPet) {
 					userLoot.add(unownedPet);
 				}
+			}
+
+			if (roll(4500)) {
+				userLoot.add('Takon');
+			}
+			if (roll(140)) {
+				userLoot.add('Clue scroll (grandmaster)');
+			}
+			if (roll(2000)) {
+				userLoot.add('Steve');
 			}
 
 			totalLoot.add(userLoot);
@@ -129,7 +145,7 @@ export default class implements LfgInterface {
 			extraMessage.push(
 				`${deathStr} **${user.username}** (${personalPoints?.toLocaleString()} pts, ${
 					Emoji.Skull
-				}${deathChance.toFixed(0)}%)`
+				}${deathChance.toFixed(0)}%) ${user.usingPet('Flappy') ? '<:flappy:813000865383972874>' : ''}`
 			);
 			await user.addItemsToBank(userLoot, true);
 		}
@@ -218,19 +234,8 @@ export default class implements LfgInterface {
 		return returnMessage;
 	};
 
-	async getItemToRemoveFromBank(params: LfgGetItemToRemoveFromBank) {
-		const totalCost = new Bank();
-		await Promise.all(
-			params.party.map(async u => {
-				const supplies = await calcCoxInput(u, params.solo);
-				await u.removeItemsFromBank(supplies);
-				totalCost.add(supplies);
-			})
-		);
-		await params.client.settings.update(
-			ClientSettings.EconomyStats.CoxCost,
-			addBanks([params.client.settings.get(ClientSettings.EconomyStats.CoxCost), totalCost.bank])
-		);
+	async getItemToRemoveFromBank(params: LfgGetItemToRemoveFromBank): Promise<Bank> {
+		return calcCoxInput(params.user, params.solo);
 	}
 
 	checkTeamRequirements(params: LfgCheckTeamRequirements): string[] {

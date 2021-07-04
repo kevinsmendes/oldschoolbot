@@ -119,6 +119,7 @@ export default class extends Monitor {
 	}
 
 	async run(msg: KlasaMessage) {
+		console.log('Monitor - boxSpawn', Date.now());
 		if (!msg.guild || msg.guild.id !== SupportServer || msg.channel.id !== '792691343284764693') {
 			return;
 		}

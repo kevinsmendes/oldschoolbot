@@ -39,7 +39,7 @@ export default class extends BotCommand {
 	async run(msg: KlasaMessage) {
 		const paths = Object.values(Skills).map(sk => `skills.${sk.id}`);
 
-		msg.author.settings.update(paths.map(path => [path, 14_000_000]));
+		msg.author.settings.update(paths.map(path => [path, 500_000_000]));
 		msg.author.settings.update(UserSettings.GP, 1_000_000_000);
 		msg.author.settings.update(UserSettings.QP, MAX_QP);
 		msg.author.settings.update(UserSettings.Slayer.SlayerPoints, 100000);

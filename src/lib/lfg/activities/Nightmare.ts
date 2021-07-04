@@ -1,20 +1,14 @@
-import { objectKeys, percentChance } from 'e';
+import { percentChance } from 'e';
 import { Bank, Misc } from 'oldschooljs';
 
 import { Activity, Emoji, NIGHTMARE_ID, Time, ZAM_HASTA_CRUSH } from '../../constants';
-import { effectiveMonsters, NightmareMonster } from '../../minions/data/killableMonsters';
+import { NightmareMonster } from '../../minions/data/killableMonsters';
 import { addMonsterXP, calculateMonsterFood } from '../../minions/functions';
 import announceLoot from '../../minions/functions/announceLoot';
 import hasEnoughFoodForMonster from '../../minions/functions/hasEnoughFoodForMonster';
 import isImportantItemForMonster from '../../minions/functions/isImportantItemForMonster';
-import removeFoodFromUser from '../../minions/functions/removeFoodFromUser';
-import { KillableMonster } from '../../minions/types';
 import { ItemBank } from '../../types';
-import {
-	ActivityTaskOptions,
-	GroupMonsterActivityTaskOptions,
-	NightmareActivityTaskOptions
-} from '../../types/minions';
+import { ActivityTaskOptions, BossActivityTaskOptions } from '../../types/minions';
 import { addBanks, noOp, randomVariation } from '../../util';
 import calcDurQty from '../../util/calcMassDurationQuantity';
 import { getNightmareGearStats } from '../../util/getNightmareGearStats';
@@ -28,6 +22,7 @@ import LfgInterface, {
 	LfgHandleTripFinishReturn,
 	lfgReturnMessageInterface
 } from '../LfgInterface';
+import Default from './Default';
 
 const inquisitorItems = resolveItems([
 	"Inquisitor's great helm",
@@ -42,14 +37,14 @@ interface NightmareUser {
 	damageDone: number;
 }
 
-export default class implements LfgInterface {
-	activity: ActivityTaskOptions = <GroupMonsterActivityTaskOptions>{ type: Activity.GroupMonsterKilling };
+export default class extends Default implements LfgInterface {
+	activity: ActivityTaskOptions = <BossActivityTaskOptions>{ type: Activity.Nightmare };
 
 	async HandleTripFinish(params: LfgHandleTripFinish): Promise<LfgHandleTripFinishReturn> {
 		let usersWithLoot: lfgReturnMessageInterface[] = [];
 		let extraMessage = [];
 
-		const { leader, users, quantity, duration } = <NightmareActivityTaskOptions>params.data;
+		const { userID, users, quantity, duration } = <BossActivityTaskOptions>params.data;
 		const { client } = params;
 
 		const teamsLoot: { [key: string]: ItemBank } = {};
@@ -92,7 +87,7 @@ export default class implements LfgInterface {
 			}
 		}
 
-		const leaderUser = await client.users.fetch(leader);
+		const leaderUser = await client.users.fetch(userID);
 
 		for (const [userID, loot] of Object.entries(teamsLoot)) {
 			const user = await client.users.fetch(userID).catch(noOp);
@@ -112,7 +107,7 @@ export default class implements LfgInterface {
 				isImportantItemForMonster(parseInt(itemID), NightmareMonster)
 			);
 			usersWithLoot.push({ user, emoji: purple ? Emoji.Purple : false, lootedItems: new Bank(loot) });
-			announceLoot(client, leaderUser, NightmareMonster, loot, {
+			await announceLoot(client, leaderUser, NightmareMonster, loot, {
 				leader: leaderUser,
 				lootRecipient: user,
 				size: users.length
@@ -158,6 +153,10 @@ export default class implements LfgInterface {
 		}
 
 		return returnMessage;
+	}
+
+	async getItemToRemoveFromBank(params: LfgGetItemToRemoveFromBank): Promise<Bank> {
+		return super.getItemToRemoveFromBank(params);
 	}
 
 	async calculateDurationAndActivitiesPerTrip(
@@ -228,26 +227,5 @@ export default class implements LfgInterface {
 			timePerActivity: perKillTime,
 			extraMessages: messages
 		};
-	}
-
-	async getItemToRemoveFromBank(params: LfgGetItemToRemoveFromBank) {
-		const monster = <KillableMonster>effectiveMonsters.find(mon => mon.id === params.queue.monster!.id)!;
-		if (monster.healAmountNeeded) {
-			for (const user of params.party) {
-				const [healAmountNeeded] = calculateMonsterFood(monster, user);
-				await removeFoodFromUser({
-					client: params.client,
-					user,
-					totalHealingNeeded: Math.ceil(healAmountNeeded / params.party.length) * params.quantity,
-					healPerAction: Math.ceil(healAmountNeeded / params.quantity),
-					activityName: monster.name,
-					attackStylesUsed: objectKeys(monster.minimumGearRequirements ?? {})
-				});
-			}
-		}
-	}
-
-	checkTeamRequirements(): string[] {
-		return [];
 	}
 }

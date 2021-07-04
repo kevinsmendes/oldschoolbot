@@ -18,7 +18,8 @@ export default async function removeFoodFromUser({
 	healPerAction,
 	activityName,
 	attackStylesUsed,
-	learningPercentage
+	learningPercentage,
+	dryRun
 }: {
 	client: KlasaClient;
 	user: KlasaUser;
@@ -27,6 +28,7 @@ export default async function removeFoodFromUser({
 	activityName: string;
 	attackStylesUsed: GearSetupTypes[];
 	learningPercentage?: number;
+	dryRun?: boolean;
 }): Promise<[string, ItemBank]> {
 	await user.settings.sync(true);
 
@@ -50,10 +52,10 @@ export default async function removeFoodFromUser({
 			i => i.name
 		).join(', ')}.`;
 	} else {
-		await user.removeItemsFromBank(foodToRemove);
-
-		updateBankSetting(client, ClientSettings.EconomyStats.PVMCost, foodToRemove);
-
+		if (!dryRun) {
+			await user.removeItemsFromBank(foodToRemove);
+			await updateBankSetting(client, ClientSettings.EconomyStats.PVMCost, foodToRemove);
+		}
 		let reductionsStr = reductions.length > 0 ? ` **Base Food Reductions:** ${reductions.join(', ')}.` : '';
 		return [`${new Bank(foodToRemove)} from ${user.username}${reductionsStr}`, foodToRemove];
 	}

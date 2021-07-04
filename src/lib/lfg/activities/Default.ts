@@ -2,14 +2,16 @@ import { objectKeys } from 'e';
 import { Bank } from 'oldschooljs';
 
 import { Activity, Emoji } from '../../constants';
+import { getRandomMysteryBox } from '../../data/openables';
 import killableMonsters from '../../minions/data/killableMonsters';
+import KingGoldemar from '../../minions/data/killableMonsters/custom/KingGoldemar';
 import { addMonsterXP, calculateMonsterFood } from '../../minions/functions';
 import announceLoot from '../../minions/functions/announceLoot';
 import hasEnoughFoodForMonster from '../../minions/functions/hasEnoughFoodForMonster';
 import isImportantItemForMonster from '../../minions/functions/isImportantItemForMonster';
 import removeFoodFromUser from '../../minions/functions/removeFoodFromUser';
 import { ActivityTaskOptions, GroupMonsterActivityTaskOptions } from '../../types/minions';
-import { noOp, randomItemFromArray } from '../../util';
+import { addBanks, itemID, noOp, randomItemFromArray, roll } from '../../util';
 import calcDurQty from '../../util/calcMassDurationQuantity';
 import LfgInterface, {
 	LfgCalculateDurationAndActivitiesPerTrip,
@@ -35,6 +37,13 @@ export default class implements LfgInterface {
 
 		for (let i = 0; i < quantity; i++) {
 			const loot = monster.table.kill(1, {});
+
+			// Loot box --- Disabled for King Goldemar
+			if (roll(10) && ![KingGoldemar.id].indexOf(monster.id)) {
+				loot.multiply(4);
+				loot.add(getRandomMysteryBox());
+			}
+
 			const userWhoGetsLoot = randomItemFromArray(users);
 			const currentLoot = teamsLoot[userWhoGetsLoot];
 			teamsLoot[userWhoGetsLoot] = loot.add(currentLoot);
@@ -57,10 +66,18 @@ export default class implements LfgInterface {
 				taskQuantity: null
 			});
 
+			const kcToAdd = kcAmounts[user.id];
+
+			// If player has Ori, increase loot obtained
+			if (user.equippedPet() === itemID('Ori')) {
+				loot.bank = addBanks([monster.table.kill(Math.ceil(kcToAdd * 0.25), {}).bank ?? {}, loot.bank]);
+			}
 			await user.addItemsToBank(loot, true);
+
 			if (kcAmounts[user.id]) {
 				await user.incrementMonsterScore(monsterID, kcAmounts[user.id]);
 			}
+
 			const purple = Object.keys(loot.bank).some(itemID => isImportantItemForMonster(parseInt(itemID), monster));
 
 			usersWithLoot.push({ user, emoji: purple ? Emoji.Purple : false, lootedItems: loot });
@@ -117,21 +134,23 @@ export default class implements LfgInterface {
 		return returnMessage;
 	}
 
-	async getItemToRemoveFromBank(params: LfgGetItemToRemoveFromBank) {
+	async getItemToRemoveFromBank(params: LfgGetItemToRemoveFromBank): Promise<Bank> {
+		const totalLoot = new Bank();
 		const monster = killableMonsters.find(mon => mon.id === params.queue.monster!.id)!;
 		if (monster.healAmountNeeded) {
-			for (const user of params.party) {
-				const [healAmountNeeded] = calculateMonsterFood(monster, user);
-				await removeFoodFromUser({
-					client: params.client,
-					user,
-					totalHealingNeeded: Math.ceil(healAmountNeeded / params.party.length) * params.quantity,
-					healPerAction: Math.ceil(healAmountNeeded / params.quantity),
-					activityName: monster.name,
-					attackStylesUsed: objectKeys(monster.minimumGearRequirements ?? {})
-				});
-			}
+			const [healAmountNeeded] = calculateMonsterFood(monster, params.user);
+			const [, lootToRemove] = await removeFoodFromUser({
+				client: params.client!,
+				user: params.user,
+				totalHealingNeeded: Math.ceil(healAmountNeeded / params.party.length) * params.quantity,
+				healPerAction: Math.ceil(healAmountNeeded / params.quantity),
+				activityName: monster.name,
+				attackStylesUsed: objectKeys(monster.minimumGearRequirements ?? {}),
+				dryRun: true
+			});
+			totalLoot.add(lootToRemove);
 		}
+		return totalLoot;
 	}
 
 	checkTeamRequirements(): string[] {
