@@ -1,9 +1,9 @@
-import { increaseNumByPercent, noOp, objectEntries, reduceNumByPercent } from 'e';
+import { increaseNumByPercent, noOp, objectEntries, reduceNumByPercent, Time } from 'e';
 import { KlasaUser } from 'klasa';
 import { Bank } from 'oldschooljs';
 
 import { DungeoneeringOptions, maxFloorUserCanDo } from '../../../commands/Minion/dung';
-import { Activity, Emoji, Time } from '../../constants';
+import { Activity, Emoji } from '../../constants';
 import { getRandomMysteryBox } from '../../data/openables';
 import { UserSettings } from '../../settings/types/UserSettings';
 import Skills from '../../skilling/skills';

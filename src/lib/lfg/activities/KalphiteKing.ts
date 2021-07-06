@@ -1,8 +1,8 @@
-import { calcWhatPercent, increaseNumByPercent, percentChance, reduceNumByPercent } from 'e';
+import { calcWhatPercent, increaseNumByPercent, percentChance, reduceNumByPercent, Time } from 'e';
 import { Bank } from 'oldschooljs';
 import SimpleTable from 'oldschooljs/dist/structures/SimpleTable';
 
-import { Activity, Emoji, Time } from '../../constants';
+import { Activity, Emoji } from '../../constants';
 import { allKalphiteKingItems, KalphiteKingMonster } from '../../kalphiteking';
 import { addMonsterXP } from '../../minions/functions';
 import announceLoot from '../../minions/functions/announceLoot';

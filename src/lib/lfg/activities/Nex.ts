@@ -1,9 +1,9 @@
-import { calcWhatPercent, increaseNumByPercent, percentChance, reduceNumByPercent } from 'e';
+import { calcWhatPercent, increaseNumByPercent, percentChance, reduceNumByPercent, Time } from 'e';
 import { Bank } from 'oldschooljs';
 import SimpleTable from 'oldschooljs/dist/structures/SimpleTable';
 
 import { production } from '../../../config';
-import { Activity, Emoji, Time } from '../../constants';
+import { Activity, Emoji } from '../../constants';
 import { addMonsterXP } from '../../minions/functions';
 import announceLoot from '../../minions/functions/announceLoot';
 import calculateMonsterFood from '../../minions/functions/calculateMonsterFood';

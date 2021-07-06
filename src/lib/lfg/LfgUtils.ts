@@ -1,7 +1,8 @@
+import { Time } from 'e';
 import { KlasaClient, KlasaUser } from 'klasa';
 import { Bank, Monsters } from 'oldschooljs';
 
-import { Emoji, Time } from '../constants';
+import { Emoji } from '../constants';
 import { GearSetupTypes } from '../gear';
 import { KalphiteKingMonster } from '../kalphiteking';
 import { effectiveMonsters, NightmareMonster } from '../minions/data/killableMonsters';
