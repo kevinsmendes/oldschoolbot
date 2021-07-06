@@ -4,7 +4,7 @@ import { Activity } from '../../lib/constants';
 import { requiresMinion } from '../../lib/minions/decorators';
 import { cancelTask, getActivityOfUser } from '../../lib/settings/settings';
 import { BotCommand } from '../../lib/structures/BotCommand';
-import { BossActivityTaskOptions, RaidsActivityTaskOptions } from './../../lib/types/minions';
+import { BossActivityTaskOptions, LfgActivityTaskOptions, RaidsActivityTaskOptions } from './../../lib/types/minions';
 
 const options = {
 	max: 1,
@@ -88,6 +88,15 @@ export default class extends BotCommand {
 			if (data.users.length > 1) {
 				return msg.channel.send(
 					`${msg.author.minionName} is currently doing the Chamber's of Xeric, they cannot leave their team!`
+				);
+			}
+		}
+
+		if (currentTask.type === Activity.Lfg) {
+			const data = currentTask as LfgActivityTaskOptions;
+			if (data.users.length > 1) {
+				return msg.channel.send(
+					`${msg.author.minionName} is in a group trip, their team wouldn't like it if they left!`
 				);
 			}
 		}
