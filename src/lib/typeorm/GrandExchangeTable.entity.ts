@@ -1,0 +1,87 @@
+import { BaseEntity, Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+
+export enum GrandExchangeStatus {
+	Fulfilled = 'fulfilled', // other is completed and the user is notified
+	Completed = 'completed', // order is completed (all items sold or bought)
+	Canceled = 'canceled', // user cancels the trade
+	Pending = 'peding' // order is pending some change
+}
+
+export enum GrandExchangeType {
+	Buy = 'buy',
+	Sell = 'sell'
+}
+
+@Entity({ name: 'grandExchange' })
+@Index(['dateAdded', 'item'])
+@Index(['item', 'quantityTraded', 'quantity'])
+export class GrandExchangeTable extends BaseEntity {
+	@PrimaryGeneratedColumn('increment')
+	public id!: string;
+
+	@Column('varchar', { length: 19, name: 'user_id', nullable: false })
+	public userID!: string;
+
+	@Column('enum', { enum: GrandExchangeType, name: 'type', nullable: false })
+	public type!: GrandExchangeType;
+
+	@Column('integer', { name: 'slot', nullable: false })
+	public slot!: number;
+
+	@Index()
+	@Column('timestamp without time zone', { name: 'date_added', nullable: false, default: new Date() })
+	public dateAdded!: Date;
+
+	@Index()
+	@Column('integer', { name: 'item', nullable: false })
+	public item!: number;
+
+	@Column('integer', { name: 'quantity', nullable: false })
+	public quantity!: number;
+
+	// The amount of items in the slot collection box (total items received so far from the transaction)
+	@Column('integer', { name: 'collection_quantity', nullable: false })
+	public collectionQuantity!: number;
+
+	// The amount of cash in the slot collection box (total cash received so far from the transaction)
+	@Column('integer', { name: 'collection_cash', nullable: false })
+	public collectionCash!: number;
+
+	@Column('integer', { name: 'quantity_traded', nullable: false })
+	public quantityTraded!: number;
+
+	// Price per item
+	@Column('integer', { name: 'price', nullable: false })
+	public price!: number;
+
+	@Column('enum', { enum: GrandExchangeStatus, name: 'status', nullable: true })
+	public status!: GrandExchangeStatus;
+}
+
+@Entity({ name: 'grandExchangeHistory' })
+@Index(['userBought', 'dateTransaction'])
+@Index(['userSold', 'dateTransaction'])
+@Index(['userBought', 'userSold', 'dateTransaction'])
+export class GrandExchangeHistoryTable extends BaseEntity {
+	@PrimaryGeneratedColumn('increment')
+	public id!: string;
+
+	@Column('varchar', { length: 19, name: 'user_bought', nullable: false })
+	public userBought!: string;
+
+	@Column('varchar', { length: 19, name: 'user_sold', nullable: false })
+	public userSold!: string;
+
+	@Column('timestamp without time zone', { name: 'date_transaction', nullable: false, default: new Date() })
+	public dateTransaction!: Date;
+
+	@Column('integer', { name: 'item', nullable: false })
+	public item!: number;
+
+	@Column('integer', { name: 'quantity', nullable: false })
+	public quantity!: number;
+
+	// Price per item traded
+	@Column('integer', { name: 'price', nullable: false })
+	public price!: number;
+}

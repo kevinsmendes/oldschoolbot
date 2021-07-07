@@ -2,7 +2,6 @@ import { Image } from 'canvas';
 import { FSWatcher } from 'chokidar';
 import { MessageEmbed, MessageOptions, MessagePayload } from 'discord.js';
 import { KlasaMessage, KlasaUser, Settings, SettingsUpdateResult } from 'klasa';
-import {} from 'node:process';
 import { Bank, Player } from 'oldschooljs';
 import PQueue from 'p-queue';
 import { CommentStream, SubmissionStream } from 'snoostorm';
@@ -51,6 +50,7 @@ declare module 'klasa' {
 		minionTicker: NodeJS.Timeout;
 		dailyReminderTicker: NodeJS.Timeout;
 		giveawayTicker: NodeJS.Timeout;
+		grandExchangeTicker: NodeJS.Timeout;
 		analyticsInterval: NodeJS.Timeout;
 		metricsInterval: NodeJS.Timeout;
 		options: KlasaClientOptions;
