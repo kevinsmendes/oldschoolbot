@@ -1,16 +1,22 @@
-import { BaseEntity, Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { BaseEntity, Column, Entity, Index, PrimaryGeneratedColumn, ValueTransformer } from 'typeorm';
 
 export enum GrandExchangeStatus {
-	Fulfilled = 'fulfilled', // other is completed and the user is notified
+	Notified = 'notified', // other is completed and the user is notified
 	Completed = 'completed', // order is completed (all items sold or bought)
 	Canceled = 'canceled', // user cancels the trade
-	Pending = 'peding' // order is pending some change
+	Cleared = 'cleared', // Canceled orders that are collect changes to this
+	Running = 'running' // order running
 }
 
 export enum GrandExchangeType {
 	Buy = 'buy',
 	Sell = 'sell'
 }
+
+export const bigint: ValueTransformer = {
+	to: (entityValue: number) => entityValue,
+	from: (databaseValue: string): number => parseInt(databaseValue, 10)
+};
 
 @Entity({ name: 'grandExchange' })
 @Index(['dateAdded', 'item'])
@@ -44,17 +50,22 @@ export class GrandExchangeTable extends BaseEntity {
 	public collectionQuantity!: number;
 
 	// The amount of cash in the slot collection box (total cash received so far from the transaction)
-	@Column('integer', { name: 'collection_cash', nullable: false })
+	@Column('bigint', { name: 'collection_cash', nullable: false, transformer: [bigint] })
 	public collectionCash!: number;
 
 	@Column('integer', { name: 'quantity_traded', nullable: false })
 	public quantityTraded!: number;
 
 	// Price per item
-	@Column('integer', { name: 'price', nullable: false })
+	@Column('bigint', { name: 'price', nullable: false, transformer: [bigint] })
 	public price!: number;
 
-	@Column('enum', { enum: GrandExchangeStatus, name: 'status', nullable: true })
+	@Column('enum', {
+		enum: GrandExchangeStatus,
+		name: 'status',
+		nullable: false,
+		default: GrandExchangeStatus.Running
+	})
 	public status!: GrandExchangeStatus;
 }
 
@@ -82,6 +93,6 @@ export class GrandExchangeHistoryTable extends BaseEntity {
 	public quantity!: number;
 
 	// Price per item traded
-	@Column('integer', { name: 'price', nullable: false })
+	@Column('bigint', { name: 'price', nullable: false, transformer: [bigint] })
 	public price!: number;
 }
