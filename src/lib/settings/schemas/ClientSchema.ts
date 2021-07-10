@@ -40,6 +40,8 @@ Client.defaultClientSchema
 			.add('thievingCost', 'any', { default: {} })
 	)
 
+	.add('grandExchange', folder => folder.add('tradeLimit', 'any', { default: {} }))
+
 	.add('gp_sell', 'integer', { default: 0, maximum: Number.MAX_SAFE_INTEGER })
 	.add('gp_pvm', 'integer', { default: 0, maximum: Number.MAX_SAFE_INTEGER })
 	.add('gp_alch', 'integer', { default: 0, maximum: Number.MAX_SAFE_INTEGER })

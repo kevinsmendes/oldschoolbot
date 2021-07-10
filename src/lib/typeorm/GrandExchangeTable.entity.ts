@@ -1,4 +1,4 @@
-import { BaseEntity, Column, Entity, Index, PrimaryGeneratedColumn, ValueTransformer } from 'typeorm';
+import { BaseEntity, Column, Entity, Index, PrimaryColumn, PrimaryGeneratedColumn, ValueTransformer } from 'typeorm';
 
 export enum GrandExchangeStatus {
 	Notified = 'notified', // other is completed and the user is notified
@@ -39,6 +39,10 @@ export class GrandExchangeTable extends BaseEntity {
 	public dateAdded!: Date;
 
 	@Index()
+	@Column('timestamp without time zone', { name: 'date_limit_end', nullable: true })
+	public dateLimitEnd!: Date;
+
+	@Index()
 	@Column('integer', { name: 'item', nullable: false })
 	public item!: number;
 
@@ -67,12 +71,18 @@ export class GrandExchangeTable extends BaseEntity {
 		default: GrandExchangeStatus.Running
 	})
 	public status!: GrandExchangeStatus;
+
+	// Calculated by ge.ts to define if the slot is current limited
+	public limited: boolean = false;
+	// Number of seconds until the trade goes back into being active
+	public limitedUnlock?: number;
 }
 
 @Entity({ name: 'grandExchangeHistory' })
-@Index(['userBought', 'dateTransaction'])
-@Index(['userSold', 'dateTransaction'])
-@Index(['userBought', 'userSold', 'dateTransaction'])
+@Index(['item', 'dateTransaction'])
+@Index(['boughtTransaction', 'dateTransaction'])
+@Index(['soldTransaction', 'dateTransaction'])
+@Index(['boughtTransaction', 'soldTransaction', 'dateTransaction'])
 export class GrandExchangeHistoryTable extends BaseEntity {
 	@PrimaryGeneratedColumn('increment')
 	public id!: string;
@@ -80,8 +90,14 @@ export class GrandExchangeHistoryTable extends BaseEntity {
 	@Column('varchar', { length: 19, name: 'user_bought', nullable: false })
 	public userBought!: string;
 
+	@Column('integer', { name: 'bought_transaction_id', nullable: false })
+	public boughtTransaction!: number;
+
 	@Column('varchar', { length: 19, name: 'user_sold', nullable: false })
 	public userSold!: string;
+
+	@Column('integer', { name: 'sold_transaction_id', nullable: false })
+	public soldTransaction!: number;
 
 	@Column('timestamp without time zone', { name: 'date_transaction', nullable: false, default: new Date() })
 	public dateTransaction!: Date;
@@ -95,4 +111,17 @@ export class GrandExchangeHistoryTable extends BaseEntity {
 	// Price per item traded
 	@Column('bigint', { name: 'price', nullable: false, transformer: [bigint] })
 	public price!: number;
+}
+
+@Entity({ name: 'grandExchangeLimitedUser' })
+@Index(['user', 'item', 'limitedUntil'])
+export class GrandExchangeLimitedUser extends BaseEntity {
+	@PrimaryColumn('varchar', { length: 19, name: 'user_id' })
+	public user!: string;
+
+	@PrimaryColumn('integer', { name: 'item' })
+	public item!: string;
+
+	@Column('timestamp without time zone', { name: 'limited_until', nullable: false, default: new Date() })
+	public limitedUntil!: Date;
 }

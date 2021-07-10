@@ -16,6 +16,10 @@ export namespace ClientSettings {
 	export const GuildBlacklist = T<readonly string[]>('guildBlacklist');
 	export const UserBlacklist = T<readonly string[]>('userBlacklist');
 
+	export namespace GrandExchange {
+		export const TradeLimit = T<O.Readonly<ItemBank>>('grandExchange.tradeLimit');
+	}
+
 	export namespace EconomyStats {
 		export const DicingBank = T<number>('economyStats.dicingBank');
 		export const DuelTaxBank = T<number>('economyStats.duelTaxBank');

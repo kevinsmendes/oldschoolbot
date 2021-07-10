@@ -51,6 +51,7 @@ declare module 'klasa' {
 		dailyReminderTicker: NodeJS.Timeout;
 		giveawayTicker: NodeJS.Timeout;
 		grandExchangeTicker: NodeJS.Timeout;
+		grandExchangeUpdateTicker: NodeJS.Timeout;
 		analyticsInterval: NodeJS.Timeout;
 		metricsInterval: NodeJS.Timeout;
 		options: KlasaClientOptions;

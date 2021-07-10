@@ -7,13 +7,15 @@ import { Bank, Items } from 'oldschooljs';
 import { Item } from 'oldschooljs/dist/meta/types';
 import { itemNameMap } from 'oldschooljs/dist/structures/Items';
 import { fromKMB } from 'oldschooljs/dist/util';
-import { Between, In, Not } from 'typeorm';
+import { Between, getConnection, In, Not } from 'typeorm';
 
 import { Events, PerkTier, SILENT_ERROR } from '../../lib/constants';
 import { GuildSettings } from '../../lib/settings/types/GuildSettings';
 import { UserSettings } from '../../lib/settings/types/UserSettings';
 import { BotCommand } from '../../lib/structures/BotCommand';
 import {
+	GrandExchangeHistoryTable,
+	GrandExchangeLimitedUser,
 	GrandExchangeStatus,
 	GrandExchangeTable,
 	GrandExchangeType
@@ -36,54 +38,46 @@ interface grandExchangeSlotsInterface {
 	requirements?: PerkTier;
 }
 
+interface historyInterface {
+	type: GrandExchangeType;
+	item: Item;
+	qty: number;
+	price: number;
+}
+
 const grandExchangeSlots: grandExchangeSlotsInterface[] = [
 	{ id: 1 },
 	{ id: 2 },
-	{
-		id: 3,
-		requirements: PerkTier.One
-	},
-	{ id: 4, requirements: PerkTier.Two },
-	{ id: 5, requirements: PerkTier.Three },
-	{ id: 6, requirements: PerkTier.Three },
+	{ id: 3, requirements: PerkTier.One },
+	{ id: 4, requirements: PerkTier.One },
+	{ id: 5, requirements: PerkTier.Two },
+	{ id: 6, requirements: PerkTier.Two },
 	{ id: 7, requirements: PerkTier.Three },
 	{ id: 8, requirements: PerkTier.Three }
 ];
 
 export default class extends BotCommand {
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore
 	private geInterface: Image | null = null;
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore
 	private geInterfaceCollection: Image | null = null;
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore
 	private geSlotLocked: Image | null = null;
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore
 	private geSlotOpen: Image | null = null;
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore
 	private geSlotActive: Image | null = null;
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore
 	private geProgressShadow: Image | null = null;
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore
 	private geProgressCollectionShadow: Image | null = null;
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore
+	private geCollectionSlot: Image | null = null;
+	private geCollectionSlotLocked: Image | null = null;
+	private geSetupOffer: Image | null = null;
+	private geHistoryHeader: Image | null = null;
+	private geHistoryBody: Image | null = null;
+	private geHistoryFooter: Image | null = null;
 	private geIconBuy: Image | null = null;
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore
 	private geIconSell: Image | null = null;
 	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 	// @ts-ignore
-	private geCollectionSlot: Image | null = null;
+	private geIconBuyBig: Image | null = null;
 	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 	// @ts-ignore
-	private geCollectionSlotLocked: Image | null = null;
+	private geIconSellBig: Image | null = null;
 
 	public constructor(store: CommandStore, file: string[], directory: string) {
 		super(store, file, directory, {
@@ -127,11 +121,29 @@ export default class extends BotCommand {
 		this.geIconSell = await canvasImageFromBuffer(
 			fs.readFileSync('./src/lib/resources/images/grandexchange/ge_sell_mini_icon.png')
 		);
+		this.geIconBuyBig = await canvasImageFromBuffer(
+			fs.readFileSync('./src/lib/resources/images/grandexchange/ge_icon_buy_big.png')
+		);
+		this.geIconSellBig = await canvasImageFromBuffer(
+			fs.readFileSync('./src/lib/resources/images/grandexchange/ge_icon_sell_big.png')
+		);
 		this.geCollectionSlot = await canvasImageFromBuffer(
 			fs.readFileSync('./src/lib/resources/images/grandexchange/ge_slot_collection.png')
 		);
 		this.geCollectionSlotLocked = await canvasImageFromBuffer(
-			fs.readFileSync('./src/lib/resources/images/grandexchange/ge_slot_collection.png')
+			fs.readFileSync('./src/lib/resources/images/grandexchange/ge_slot_collection_locked.png')
+		);
+		this.geSetupOffer = await canvasImageFromBuffer(
+			fs.readFileSync('./src/lib/resources/images/grandexchange/ge_setup_offer.png')
+		);
+		this.geHistoryHeader = await canvasImageFromBuffer(
+			fs.readFileSync('./src/lib/resources/images/grandexchange/ge_history_header.png')
+		);
+		this.geHistoryBody = await canvasImageFromBuffer(
+			fs.readFileSync('./src/lib/resources/images/grandexchange/ge_history_body.png')
+		);
+		this.geHistoryFooter = await canvasImageFromBuffer(
+			fs.readFileSync('./src/lib/resources/images/grandexchange/ge_history_footer.png')
 		);
 	}
 
@@ -219,7 +231,6 @@ export default class extends BotCommand {
 		collection: boolean = false,
 		locked: boolean = false
 	) {
-		console.log(slot, locked);
 		const slotImage = collection
 			? locked
 				? this.geCollectionSlotLocked!
@@ -387,8 +398,25 @@ export default class extends BotCommand {
 				ctx.fillStyle = '#8F0000';
 				progressWidth = maxWidth;
 			}
+			// Change color to show that this trade is locked
+			if (slotData.limited && ctx.fillStyle === '#ff981f') {
+				ctx.fillStyle = '#174972';
+			}
 			ctx.fillRect(0, 0, progressWidth, progressShadowImage.height);
 			ctx.drawImage(progressShadowImage, 0, 0, progressShadowImage.width, progressShadowImage.height);
+			// Draw locked text
+			if (!collection && slotData.limited && ctx.fillStyle === '#174972') {
+				ctx.textAlign = 'center';
+				ctx.fillStyle = '#FFB83F';
+				this.drawText(
+					ctx,
+					`Limited${!slotData.limitedUnlock ? '!' : ` ${this.formatDuration(slotData.limitedUnlock)}`}`,
+					Math.floor(this.geSlotOpen!.width / 2) - 3,
+					11,
+					undefined,
+					10
+				);
+			}
 			ctx.restore();
 		}
 	}
@@ -437,6 +465,221 @@ export default class extends BotCommand {
 			ctx.restore();
 			x++;
 		}
+		return canvasToBufferAsync(canvas, 'image/png');
+	}
+
+	async createHistoryInterface(items: historyInterface[]) {
+		const repeaterLength = items.length > 0 ? items.length : 1;
+
+		const canvasHeader = this.geHistoryHeader!;
+		const canvasBody = this.geHistoryBody!;
+		const canvasFooter = this.geHistoryFooter!;
+
+		const canvasHeight = canvasHeader!.height + canvasFooter!.height + repeaterLength * canvasBody!.height;
+
+		const canvas = createCanvas(canvasHeader.width, canvasHeight);
+		const ctx = canvas.getContext('2d');
+		ctx.font = '16px OSRSFontCompact';
+		ctx.imageSmoothingEnabled = false;
+		ctx.clearRect(0, 0, canvas.width, canvasHeight);
+
+		// Draw background
+		// Draw header
+		ctx.drawImage(canvasHeader, 0, 0, canvasHeader.width, canvasHeader.height);
+		// Draw body
+		ctx.fillStyle = ctx.createPattern(canvasBody, 'repeat');
+		ctx.fillRect(0, canvasHeader.height, canvas.width, canvas.height);
+		// Draw footer
+		ctx.drawImage(
+			canvasFooter,
+			0,
+			canvasHeader.height + repeaterLength * canvasBody.height,
+			canvasFooter.width,
+			canvasFooter.height
+		);
+
+		// Draw first item
+		ctx.translate(11, canvasHeader.height);
+		ctx.save();
+		for (const [index, item] of items.entries()) {
+			// Draw transparency background for this row
+			ctx.fillStyle = `rgba(255, 255, 255, ${index % 2 === 0 ? '0.06' : '0.03'})`;
+			ctx.fillRect(0, index * canvasBody.height, canvas.width - 22, canvasBody.height);
+
+			// Draw item name
+			ctx.save();
+			ctx.translate(159, index * canvasBody.height + 22);
+			ctx.font = '16px OSRSFontCompact';
+			ctx.textAlign = 'center';
+			ctx.fillStyle = '#FFB83F';
+			this.drawText(ctx, `${item.item.name}`, 0, 1, undefined, 10);
+			ctx.restore();
+
+			// Get item image
+			const itemImage = await this.client.tasks
+				.get('bankImage')!
+				.getItemImage(item.item.id, item.qty)
+				.catch(() => {
+					console.error(`Failed to load item image for item with id: ${item.item.id}`);
+				});
+			if (!itemImage) {
+				this.client.emit(Events.Warn, `Item with ID[${item.item.id}] has no item image.`);
+			}
+
+			// Draw item
+			ctx.save();
+			ctx.translate(261, index * canvasBody.height + 3);
+			ctx.drawImage(
+				itemImage,
+				Math.floor((32 - itemImage!.width) / 2) + 2,
+				Math.floor((32 - itemImage!.height) / 2),
+				itemImage!.width,
+				itemImage!.height
+			);
+			if (item.qty > 1) {
+				ctx.fillStyle = generateHexColorForCashStack(item.qty);
+				this.drawText(ctx, `${item.qty.toLocaleString()}`, -1, 9, undefined, 10);
+			}
+			ctx.restore();
+
+			// Total value of the history
+			ctx.save();
+			ctx.translate(canvasBody.width - 28, index * canvasBody.height + 15);
+			ctx.textAlign = 'right';
+			if (item.qty > 1) {
+				ctx.fillStyle = generateHexColorForCashStack(item.price * item.qty);
+				this.drawText(ctx, `${(item.price * item.qty).toLocaleString()} GP`, 0, 2, undefined, 10);
+				ctx.fillStyle = generateHexColorForCashStack(item.price);
+				this.drawText(ctx, `${item.price.toLocaleString()} GP each`, 0, 16, undefined, 10);
+			} else {
+				ctx.fillStyle = generateHexColorForCashStack(item.price);
+				this.drawText(ctx, `${item.price.toLocaleString()} GP`, 0, 10, undefined, 10);
+			}
+			ctx.restore();
+
+			// Draw type icon + type text
+			ctx.save();
+			ctx.translate(2, index * canvasBody.height + 3);
+			const icon = item.type === GrandExchangeType.Buy ? this.geIconBuyBig! : this.geIconSellBig!;
+			ctx.drawImage(
+				icon,
+				Math.floor((32 - icon!.width) / 2) + 2,
+				Math.floor((32 - icon!.height) / 2),
+				icon!.width,
+				icon!.height
+			);
+			ctx.fillStyle = item.type === GrandExchangeType.Buy ? '#B2C803' : '#C66903';
+			this.drawText(ctx, `${item.type === GrandExchangeType.Buy ? 'Bought' : 'Sold'}`, 40, 20, undefined, 10);
+			ctx.restore();
+		}
+		return canvasToBufferAsync(canvas, 'image/png');
+	}
+
+	async createSetupOfferImage(item: Item, quantity: number, price: number, median: number, type: GrandExchangeType) {
+		const canvasImage = this.geSetupOffer!;
+		const canvas = createCanvas(canvasImage.width, canvasImage.height);
+		const ctx = canvas.getContext('2d');
+		ctx.font = '16px OSRSFontCompact';
+		ctx.imageSmoothingEnabled = false;
+		ctx.clearRect(0, 0, canvas.width, canvas.height);
+		ctx.drawImage(canvasImage, 0, 0, canvas.width, canvas.height);
+		// Get item image
+		const itemImage = await this.client.tasks
+			.get('bankImage')!
+			.getItemImage(item.id, quantity)
+			.catch(() => {
+				console.error(`Failed to load item image for item with id: ${item.id}`);
+			});
+		if (!itemImage) {
+			this.client.emit(Events.Warn, `Item with ID[${item.id}] has no item image.`);
+		}
+
+		// Draw item image
+		ctx.save();
+		ctx.translate(80, 73);
+		ctx.drawImage(
+			itemImage,
+			Math.floor((32 - itemImage!.width) / 2) + 2,
+			Math.floor((32 - itemImage!.height) / 2),
+			itemImage!.width,
+			itemImage!.height
+		);
+		ctx.restore();
+
+		// Draw item name
+		ctx.save();
+		ctx.translate(181, 57);
+		ctx.font = '16px RuneScape Bold 12';
+		ctx.textAlign = 'left';
+		ctx.fillStyle = '#FF981F';
+		this.drawText(ctx, `${item.name}`, 0, 0, undefined, 10);
+		ctx.restore();
+
+		// Draw item description
+		ctx.save();
+		ctx.translate(182, 71);
+		ctx.textAlign = 'left';
+		ctx.fillStyle = '#FFB83F';
+		this.drawText(ctx, `${item.examine}`, 0, 0, 270, 11);
+		ctx.restore();
+
+		// Draw unit price
+		ctx.save();
+		ctx.translate(311, 173);
+		ctx.textAlign = 'center';
+		ctx.font = '16px RuneScape Bold 12';
+		ctx.fillStyle = generateHexColorForCashStack(price);
+		this.drawText(ctx, `${price.toLocaleString()} coins`, 42, 0, undefined, 11);
+		ctx.restore();
+
+		// Draw qty
+		ctx.save();
+		ctx.translate(131, 173);
+		ctx.textAlign = 'center';
+		ctx.font = '16px RuneScape Bold 12';
+		ctx.fillStyle = '#FFB83F';
+		this.drawText(ctx, `${quantity.toLocaleString()}`, 0, 0, undefined, 11);
+		ctx.restore();
+
+		// Draw total price
+		ctx.save();
+		ctx.translate(242, 220);
+		ctx.textAlign = 'center';
+		ctx.font = '16px RuneScape Bold 12';
+		ctx.fillStyle = generateHexColorForCashStack(price * quantity);
+		this.drawText(ctx, `${(price * quantity).toLocaleString()} coins`, 0, 0, undefined, 11);
+		ctx.restore();
+
+		// Draw median price
+		ctx.save();
+		ctx.translate(85, 124);
+		ctx.textAlign = 'left';
+		ctx.fillStyle = '#FFB83F';
+		this.drawText(ctx, `${Math.floor(median).toLocaleString()} coins`, 0, 0, undefined, 11);
+		ctx.restore();
+
+		// Draw of offer
+		ctx.save();
+		ctx.translate(96, 59);
+		ctx.font = '16px RuneScape Bold 12';
+		ctx.textAlign = 'center';
+		ctx.fillStyle = '#FF981F';
+		this.drawText(ctx, `${toTitleCase(type)} offer`, 0, 0, undefined, 11);
+		ctx.restore();
+
+		// Draw offer icon
+		ctx.save();
+		ctx.translate(135, 38);
+		const icon = type === 'sell' ? this.geIconSell! : this.geIconBuy!;
+		ctx.drawImage(
+			icon,
+			Math.floor((32 - icon!.width) / 2) + 2,
+			Math.floor((32 - icon!.height) / 2),
+			icon!.width,
+			icon!.height
+		);
+		ctx.restore();
+
 		return canvasToBufferAsync(canvas, 'image/png');
 	}
 
@@ -500,6 +743,19 @@ export default class extends BotCommand {
 		}
 	}
 
+	formatDuration(ms: number) {
+		if (ms < 0) ms = -ms;
+		const time = {
+			d: Math.floor(ms / 86400000),
+			h: Math.floor(ms / 3600000) % 24,
+			m: Math.floor(ms / 60000) % 60,
+			s: Math.floor(ms / 1000) % 60
+		};
+		let nums = Object.entries(time).filter(val => val[1] !== 0);
+		if (!time.m || time.m < 1) return '< 1m';
+		return nums.map(([key, val]) => `${val}${key}`).join('');
+	}
+
 	async slots(msg: KlasaMessage, [cmd]: [string]) {
 		await this.checkDms(msg);
 		const prefix = this.prefix(msg);
@@ -518,6 +774,37 @@ export default class extends BotCommand {
 			]
 		});
 
+		// Get user limits on the slot items
+		for (const s of userSlots) {
+			// Prevents already limited items from re-calculating
+			if (s.type === 'buy' && !s.limited) {
+				const result = await getConnection().query('select * from grandexchangeuseritemlimit($1, $2)', [
+					msg.author.id,
+					s.item
+				]);
+				s.limited = result[0].grandexchangeuseritemlimit === 0;
+				if (s.limited) {
+					// Get the time until it can be active again
+					const userTimedTil = await GrandExchangeLimitedUser.findOne({
+						where: {
+							user: msg.author.id,
+							item: s.item
+						}
+					});
+					if (userTimedTil) {
+						s.limitedUnlock = userTimedTil.limitedUntil.getTime() - new Date().getTime();
+					}
+				}
+				// Update other slots to avoid doing this for the same item multiple times
+				userSlots.forEach(ss => {
+					if (ss.type === 'buy' && ss.item === s.item && ss.id !== s.id) {
+						ss.limited = s.limited;
+						ss.limitedUnlock = s.limitedUnlock;
+					}
+				});
+			}
+		}
+
 		let clerkMessage:
 			| string
 			| false = `Here you go! These are the status of all your slots. You can find more about each slot by doing ${prefix}ge slots info 1, for example.`;
@@ -529,7 +816,30 @@ export default class extends BotCommand {
 				case 'collect':
 				case 'cancel': {
 					collectView = true;
-					if (userSlots.length === 0) {
+
+					const filteredUserSlots = userSlots.filter(s => {
+						if (cmd === 'collect' && s.collectionCash === 0 && s.collectionQuantity === 0) {
+							return false;
+						} else if (
+							cmd === 'cancel' &&
+							[GrandExchangeStatus.Completed, GrandExchangeStatus.Notified].includes(s.status)
+						) {
+							return false;
+						}
+						return true;
+					});
+
+					const selectOptions = filteredUserSlots.map(s => {
+						return {
+							label: `Slot ${s.slot} - ${toTitleCase(s.type)}`,
+							value: `${s.id}`,
+							description: `${toTitleCase(s.type)}ing ${s.quantity.toLocaleString()}x ${
+								getOSItem(s.item).name
+							}, ${(s.quantity - s.quantityTraded).toLocaleString()}x left.`
+						};
+					});
+
+					if (filteredUserSlots.length === 0) {
 						clerkMessage = `I am sorry, but you have no available slots to ${
 							cmd === 'collect' ? 'collect' : 'cancel'
 						} at the moment.`;
@@ -543,19 +853,9 @@ export default class extends BotCommand {
 									new MessageSelectMenu({
 										type: 3,
 										customID: 'slotSelect',
-										options: userSlots.map(s => {
-											return {
-												label: `Slot ${s.slot} - ${toTitleCase(s.type)}`,
-												value: `${s.id}`,
-												description: `${toTitleCase(
-													s.type
-												)}ing ${s.quantity.toLocaleString()}x ${getOSItem(s.item).name}, ${(
-													s.quantity - s.quantityTraded
-												).toLocaleString()}x left.`
-											};
-										}),
+										options: selectOptions,
 										placeholder: 'Select a slot...',
-										maxValues: userSlots.length,
+										maxValues: filteredUserSlots.length,
 										minValues: 1
 									})
 								]
@@ -668,6 +968,40 @@ export default class extends BotCommand {
 			case 'box': {
 				return this.slots(msg, ['cbox']);
 			}
+			case 'history': {
+				const historyItems: historyInterface[] = (
+					await GrandExchangeHistoryTable.find({
+						where: [
+							{
+								userBought: msg.author.id
+							},
+							{
+								userSold: msg.author.id
+							}
+						],
+						order: {
+							dateTransaction: 'DESC'
+						},
+						take: 15
+					})
+				).map(h => {
+					return {
+						item: getOSItem(h.item),
+						price: h.price,
+						type: h.userBought === msg.author.id ? GrandExchangeType.Buy : GrandExchangeType.Sell,
+						qty: h.quantity
+					};
+				});
+				return msg.channel.send({
+					files: [
+						await chatHeadImage({
+							content: 'Here are your latest history...',
+							head: 'geClerk'
+						}),
+						new MessageAttachment(await this.createHistoryInterface(historyItems), 'test.png')
+					]
+				});
+			}
 		}
 
 		const explodedCmd = cmd.split(' ');
@@ -682,8 +1016,6 @@ export default class extends BotCommand {
 		const quantity = fromKMB(explodedCmd.shift()!);
 		const item = explodedCmd.join(' ');
 		let itemArray: Item[] = [];
-
-		console.log(itemPrice, type, quantity, item);
 
 		if (isNaN(itemPrice + quantity) || (type !== GrandExchangeType.Buy && type !== GrandExchangeType.Sell)) {
 			return this.invalidCommand(msg);
@@ -707,6 +1039,7 @@ export default class extends BotCommand {
 				}
 			}
 			slot = userSlot.id;
+			break;
 		}
 
 		if (!slot || slot === 0) {
@@ -835,28 +1168,33 @@ export default class extends BotCommand {
 		}
 
 		if (!msg.flagArgs.cf) {
-			channelMessage = await this.clerkChat(
-				msg,
-				`Are you sure you want to ${type} ${quantity.toLocaleString()}x ${
-					selectedItem.name
-				} for ${totalPrice.toLocaleString()} GP (${itemPrice.toLocaleString()} GP each)? The recommended price for this is item is ${selectedItem.price.toLocaleString()} GP.`,
-				{
-					components: [
-						[
-							new MessageButton({
-								label: 'Yes, I am sure.',
-								style: 'PRIMARY',
-								customID: 'confirmGeOffer'
-							}),
-							new MessageButton({
-								label: 'On a second thought...',
-								style: 'DANGER',
-								customID: 'cancelGeOffer'
-							})
-						]
+			channelMessage = await msg.channel.send({
+				files: [
+					await chatHeadImage({
+						content:
+							'Please, check if your offer matches what you want and click confirm to add this trade your database.',
+						head: 'geClerk'
+					}),
+					new MessageAttachment(
+						await this.createSetupOfferImage(selectedItem, quantity, itemPrice, selectedItem.price, type),
+						'test.png'
+					)
+				],
+				components: [
+					[
+						new MessageButton({
+							label: 'Everything is right.',
+							style: 'SUCCESS',
+							customID: 'confirmGeOffer'
+						}),
+						new MessageButton({
+							label: 'On a second thought...',
+							style: 'DANGER',
+							customID: 'cancelGeOffer'
+						})
 					]
-				}
-			);
+				]
+			});
 
 			try {
 				const selection = await channelMessage.awaitMessageComponentInteraction({

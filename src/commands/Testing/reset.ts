@@ -2,6 +2,7 @@ import { CommandStore, KlasaMessage } from 'klasa';
 
 import { getNewUser } from '../../lib/settings/settings';
 import { BotCommand } from '../../lib/structures/BotCommand';
+import { GrandExchangeTable } from '../../lib/typeorm/GrandExchangeTable.entity';
 import { SlayerTaskTable } from '../../lib/typeorm/SlayerTaskTable.entity';
 
 export default class extends BotCommand {
@@ -13,7 +14,9 @@ export default class extends BotCommand {
 	}
 
 	async run(msg: KlasaMessage) {
-		await SlayerTaskTable.delete({ user: await getNewUser(msg.author.id) });
+		const newUser = await getNewUser(msg.author.id);
+		await SlayerTaskTable.delete({ user: newUser });
+		await GrandExchangeTable.delete({ userID: newUser.id });
 		await msg.author.settings.reset();
 		await msg.author.settings.update('minion.hasBought', true);
 		return msg.channel.send('Resetteded all your data.');
