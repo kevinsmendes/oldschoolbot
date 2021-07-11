@@ -1,5 +1,5 @@
 import { CanvasRenderingContext2D, createCanvas, Image } from 'canvas';
-import { MessageAttachment, MessageButton, MessageOptions, MessageSelectMenu } from 'discord.js';
+import { MessageAttachment, MessageButton, MessageEmbed, MessageOptions, MessageSelectMenu } from 'discord.js';
 import { Time } from 'e';
 import fs from 'fs';
 import { CommandStore, KlasaMessage } from 'klasa';
@@ -7,15 +7,14 @@ import { Bank, Items } from 'oldschooljs';
 import { Item } from 'oldschooljs/dist/meta/types';
 import { itemNameMap } from 'oldschooljs/dist/structures/Items';
 import { fromKMB } from 'oldschooljs/dist/util';
-import { Between, getConnection, In, Not } from 'typeorm';
+import { Between, FindConditions, FindManyOptions, getConnection, In, Not } from 'typeorm';
 
-import { Events, PerkTier, SILENT_ERROR } from '../../lib/constants';
+import { Color, Events, PerkTier, SILENT_ERROR } from '../../lib/constants';
 import { GuildSettings } from '../../lib/settings/types/GuildSettings';
 import { UserSettings } from '../../lib/settings/types/UserSettings';
 import { BotCommand } from '../../lib/structures/BotCommand';
 import {
 	GrandExchangeHistoryTable,
-	GrandExchangeLimitedUser,
 	GrandExchangeStatus,
 	GrandExchangeTable,
 	GrandExchangeType
@@ -43,6 +42,7 @@ interface historyInterface {
 	item: Item;
 	qty: number;
 	price: number;
+	server: boolean;
 }
 
 const grandExchangeSlots: grandExchangeSlotsInterface[] = [
@@ -72,20 +72,16 @@ export default class extends BotCommand {
 	private geHistoryFooter: Image | null = null;
 	private geIconBuy: Image | null = null;
 	private geIconSell: Image | null = null;
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore
 	private geIconBuyBig: Image | null = null;
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore
 	private geIconSellBig: Image | null = null;
+	private geIconSellBuyBig: Image | null = null;
 
 	public constructor(store: CommandStore, file: string[], directory: string) {
 		super(store, file, directory, {
 			cooldown: 1,
-			usage: '[slots] [cmd:...string]',
+			usage: '[cmd:...string]',
 			usageDelim: ' ',
-			oneAtTime: true,
-			subcommands: true
+			oneAtTime: true
 		});
 	}
 
@@ -126,6 +122,9 @@ export default class extends BotCommand {
 		);
 		this.geIconSellBig = await canvasImageFromBuffer(
 			fs.readFileSync('./src/lib/resources/images/grandexchange/ge_icon_sell_big.png')
+		);
+		this.geIconSellBuyBig = await canvasImageFromBuffer(
+			fs.readFileSync('./src/lib/resources/images/grandexchange/ge_icon_sellbuy_big.png')
 		);
 		this.geCollectionSlot = await canvasImageFromBuffer(
 			fs.readFileSync('./src/lib/resources/images/grandexchange/ge_slot_collection.png')
@@ -538,7 +537,7 @@ export default class extends BotCommand {
 			);
 			if (item.qty > 1) {
 				ctx.fillStyle = generateHexColorForCashStack(item.qty);
-				this.drawText(ctx, `${item.qty.toLocaleString()}`, -1, 9, undefined, 10);
+				this.drawText(ctx, `${item.server ? '' : item.qty.toLocaleString()}`, -1, 9, undefined, 10);
 			}
 			ctx.restore();
 
@@ -546,7 +545,7 @@ export default class extends BotCommand {
 			ctx.save();
 			ctx.translate(canvasBody.width - 28, index * canvasBody.height + 15);
 			ctx.textAlign = 'right';
-			if (item.qty > 1) {
+			if (!item.server && item.qty > 1) {
 				ctx.fillStyle = generateHexColorForCashStack(item.price * item.qty);
 				this.drawText(ctx, `${(item.price * item.qty).toLocaleString()} GP`, 0, 2, undefined, 10);
 				ctx.fillStyle = generateHexColorForCashStack(item.price);
@@ -560,7 +559,11 @@ export default class extends BotCommand {
 			// Draw type icon + type text
 			ctx.save();
 			ctx.translate(2, index * canvasBody.height + 3);
-			const icon = item.type === GrandExchangeType.Buy ? this.geIconBuyBig! : this.geIconSellBig!;
+			const icon = item.server
+				? this.geIconSellBuyBig!
+				: item.type === GrandExchangeType.Buy
+				? this.geIconBuyBig!
+				: this.geIconSellBig!;
 			ctx.drawImage(
 				icon,
 				Math.floor((32 - icon!.width) / 2) + 2,
@@ -569,7 +572,14 @@ export default class extends BotCommand {
 				icon!.height
 			);
 			ctx.fillStyle = item.type === GrandExchangeType.Buy ? '#B2C803' : '#C66903';
-			this.drawText(ctx, `${item.type === GrandExchangeType.Buy ? 'Bought' : 'Sold'}`, 40, 20, undefined, 10);
+			this.drawText(
+				ctx,
+				`${item.server ? '' : item.type === GrandExchangeType.Buy ? 'Bought' : 'Sold'}`,
+				40,
+				20,
+				undefined,
+				10
+			);
 			ctx.restore();
 		}
 		return canvasToBufferAsync(canvas, 'image/png');
@@ -687,7 +697,8 @@ export default class extends BotCommand {
 		try {
 			const totalCollectedLoot = new Bank();
 			let slotsCollected: number[] = [];
-			for (const slot of slots) {
+			for (const _slot of slots) {
+				const slot = (await GrandExchangeTable.findOne({ where: { id: _slot.id } }))!;
 				const collectedItems = new Bank().add(995, slot.collectionCash).add(slot.item, slot.collectionQuantity);
 				slot.collectionQuantity = 0;
 				slot.collectionCash = 0;
@@ -714,7 +725,8 @@ export default class extends BotCommand {
 		try {
 			const totalCollectedLoot = new Bank();
 			let slotsCollected: number[] = [];
-			for (const slot of slots) {
+			for (const _slot of slots) {
+				const slot = (await GrandExchangeTable.findOne({ where: { id: _slot.id } }))!;
 				slot.status = GrandExchangeStatus.Canceled;
 				if (slot.type === GrandExchangeType.Buy) {
 					slot.collectionCash += (slot.quantity - slot.quantityTraded) * slot.price;
@@ -758,7 +770,6 @@ export default class extends BotCommand {
 
 	async slots(msg: KlasaMessage, [cmd]: [string]) {
 		await this.checkDms(msg);
-		const prefix = this.prefix(msg);
 
 		const userSlots = await GrandExchangeTable.find({
 			where: [
@@ -782,18 +793,11 @@ export default class extends BotCommand {
 					msg.author.id,
 					s.item
 				]);
-				s.limited = result[0].grandexchangeuseritemlimit === 0;
+				s.limited = result[0].trade_limit === 0;
 				if (s.limited) {
-					// Get the time until it can be active again
-					const userTimedTil = await GrandExchangeLimitedUser.findOne({
-						where: {
-							user: msg.author.id,
-							item: s.item
-						}
-					});
-					if (userTimedTil) {
-						s.limitedUnlock = userTimedTil.limitedUntil.getTime() - new Date().getTime();
-					}
+					const tempDate = new Date(result[0].date_oldest_trade);
+					tempDate.setHours(tempDate.getHours() + 4);
+					s.limitedUnlock = tempDate.valueOf() - new Date().valueOf();
 				}
 				// Update other slots to avoid doing this for the same item multiple times
 				userSlots.forEach(ss => {
@@ -805,9 +809,7 @@ export default class extends BotCommand {
 			}
 		}
 
-		let clerkMessage:
-			| string
-			| false = `Here you go! These are the status of all your slots. You can find more about each slot by doing ${prefix}ge slots info 1, for example.`;
+		let clerkMessage: string | false = 'Here you go! These are the status of all your slots.';
 		let clerkOption = {};
 		let collectView = false;
 
@@ -948,6 +950,51 @@ export default class extends BotCommand {
 		return message;
 	}
 
+	async help(msg: KlasaMessage) {
+		const prefix = this.prefix(msg);
+		const embed = new MessageEmbed()
+			.setColor(Color.Orange)
+			.setTitle('The Grand Exchange - Help Section Arcticle')
+			.setDescription(
+				"Welcome to our help guide. So, you wanted to make some trades are are quite lost? Don't worry! " +
+					'I am here for you. First, if you want to buy or sell anything, you can use the following command: ' +
+					`\`${prefix}ge (sell|buy) (quantity you wish to buy) (the name or id of the item) (the price you want for it)\`. ` +
+					'You check more examples in the end of this section.' +
+					'\n\nNow, you bought or sold something! Wonderful! The items are not sent directly to your bank!' +
+					' That is a strictly rule we follow. We have complaints in the past so, now you are the one responsible' +
+					` for collect everything that you trade. But don't worry! It is really easy. Simply run \`${prefix}ge collect\`` +
+					" and you be shown all your current GE slots. If there are anything to be collected, you'll be able to select which " +
+					'slot you want in the dropdown that will appear. Selecting the slot will take the items into your bank.' +
+					"\n\nNow, let's say you tried to buy or sell something and either you put a wrong price or regret the trade and want to cancel it." +
+					` It is really simple! Simply run \`${prefix}ge cancel\` and it will work the same as when you have to collect your items. Select which slot` +
+					" you want to cancel and wait for the magic to happen. You'll have to collect your items manually after a cancelation, have that in mind." +
+					'\n\n**But Mrs. Clerk, why there are lockeds slots on my GE?**\n\nYou will also have limited slots to trade. You start with 2 and that is increased depending on which Tier of Patreon you have on the bot.' +
+					' Tier 1 will allow you to use 4 slots, Tier 2, 6 slots and Tier3 or higher, will give you all 8 slots.' +
+					'\n\n**Okay, how about my transaction history, can I see it?**\n\nYou have access to your transaction history (up to the last 15 trades), if you want to review some recent trades, in case you forgot something.' +
+					' You also be able to check for the last trades of an item, for example, for how much sharks were in the last 15 trades.' +
+					` For that, all you need to do, is run \`${prefix}ge history [mine] [buy|sell] [item name]\`. Most of the params in the command are optional. ` +
+					"If you dont issue anything, it'll show your last 15 trades, be it either sell or buy. The buy/sell parameter only works if mine is defined." +
+					' The item parameter can be used without any other parameter. You can see more from the examples below.' +
+					`\n\n**Examples**\n\n\`${prefix}ge sell 15000 pure essence 200\` - creates a sell offer for ${(15_000).toLocaleString()} Pure Essence for 200 coins each` +
+					`\n\`${prefix}ge buy 1 twisted bow 1b\` - creates a buy offer for 1 Twisted Bow for 1 billion GP` +
+					`\n\`${prefix}ge collect\` - Shows the dialog to collect items/cash in your collection box` +
+					`\n\`${prefix}ge cancel\` - Shows the dialog to cancel your active trades` +
+					`\n\`${prefix}ge history\` - Shows your last 15 trades` +
+					`\n\`${prefix}ge history saradomin godsword\` - Shows the last 15 Saradomin Godsword trades on the server` +
+					`\n\`${prefix}ge history buy saradomin godsword\` - Same as above. The buy|sell only affects comands that has mine defined` +
+					`\n\`${prefix}ge history mine buy pure essence\` - Your your last 15 trades where you bought pure essences` +
+					`\n\`${prefix}ge history mine sell coal\` - Your your last 15 trades where you sold coal` +
+					'\n\n'
+			);
+		// large footer to allow max embeed size
+		embed.setTimestamp().setFooter(`${'\u3000'.repeat(200)}`);
+		await this.clerkChat(
+			msg,
+			'Here you go. Our help manual. Feel free to ask for help on our #help-and-support channel.',
+			{ embeds: [embed] }
+		);
+	}
+
 	async run(msg: KlasaMessage, [cmd]: [string]) {
 		await this.checkDms(msg);
 
@@ -957,55 +1004,91 @@ export default class extends BotCommand {
 			return this.slots(msg, ['slots']);
 		}
 
-		switch (cmd) {
-			case 'collect': {
-				return this.slots(msg, ['collect']);
-			}
-			case 'cancel': {
-				return this.slots(msg, ['cancel']);
-			}
-			case 'cbox':
-			case 'box': {
-				return this.slots(msg, ['cbox']);
-			}
-			case 'history': {
-				const historyItems: historyInterface[] = (
-					await GrandExchangeHistoryTable.find({
-						where: [
-							{
-								userBought: msg.author.id
-							},
-							{
-								userSold: msg.author.id
-							}
-						],
-						order: {
-							dateTransaction: 'DESC'
-						},
-						take: 15
-					})
-				).map(h => {
-					return {
-						item: getOSItem(h.item),
-						price: h.price,
-						type: h.userBought === msg.author.id ? GrandExchangeType.Buy : GrandExchangeType.Sell,
-						qty: h.quantity
-					};
-				});
-				return msg.channel.send({
-					files: [
-						await chatHeadImage({
-							content: 'Here are your latest history...',
-							head: 'geClerk'
-						}),
-						new MessageAttachment(await this.createHistoryInterface(historyItems), 'test.png')
-					]
-				});
-			}
-		}
-
 		const explodedCmd = cmd.split(' ');
 
+		const baseCmd = explodedCmd[0];
+
+		if (baseCmd) {
+			switch (baseCmd) {
+				case 'help': {
+					return this.help(msg);
+				}
+				case 'collect': {
+					return this.slots(msg, ['collect']);
+				}
+				case 'cancel': {
+					return this.slots(msg, ['cancel']);
+				}
+				case 'cbox':
+				case 'box': {
+					return this.slots(msg, ['cbox']);
+				}
+				case 'history': {
+					explodedCmd.shift();
+					const searchOptions = <FindManyOptions<GrandExchangeHistoryTable>>{};
+					let mine: string | undefined = explodedCmd.shift() ?? '';
+					const type = ['mine', 'my'].includes(mine) ? explodedCmd.shift() ?? '' : mine;
+					if (type === mine) mine = undefined;
+					let item = explodedCmd.join(' ') ?? '';
+					const whereOptions = <FindConditions<GrandExchangeHistoryTable>>{};
+
+					if (type === GrandExchangeType.Sell) {
+						if (mine) whereOptions.userSold = msg.author.id;
+					} else if (type === GrandExchangeType.Buy) {
+						if (mine) whereOptions.userBought = msg.author.id;
+					} else {
+						item = `${type} ${item}`;
+					}
+					item = item.trim();
+					if (item) {
+						const historyItem = getOSItem(item);
+						if (historyItem) {
+							whereOptions.item = historyItem.id;
+						}
+					}
+
+					if (!type && !item && (!mine || mine === 'mine')) {
+						mine = 'mine';
+						searchOptions.where = [{ userBought: msg.author.id }, { userSold: msg.author.id }];
+					} else {
+						searchOptions.where = whereOptions;
+					}
+					searchOptions.order = {
+						dateTransaction: 'DESC'
+					};
+					searchOptions.take = 15;
+					const historyItems: historyInterface[] = (await GrandExchangeHistoryTable.find(searchOptions)).map(
+						h => {
+							return {
+								item: getOSItem(h.item),
+								price: h.price,
+								type: h.userBought === msg.author.id ? GrandExchangeType.Buy : GrandExchangeType.Sell,
+								qty: h.quantity,
+								server: mine !== 'mine'
+							};
+						}
+					);
+					if (historyItems.length > 0) {
+						return msg.channel.send({
+							files: [
+								await chatHeadImage({
+									content: `Here are ${
+										mine === 'mine' ? 'your' : 'the server'
+									} latest transaction history...`,
+									head: 'geClerk'
+								}),
+								new MessageAttachment(await this.createHistoryInterface(historyItems), 'test.png')
+							]
+						});
+					}
+					return this.clerkChat(
+						msg,
+						'I am sorry, but there is nothing to show using your search criteria. Please, try again.'
+					);
+				}
+			}
+		}
+		console.log(explodedCmd);
 		if (explodedCmd.length < 4) {
 			return this.invalidCommand(msg);
 		}

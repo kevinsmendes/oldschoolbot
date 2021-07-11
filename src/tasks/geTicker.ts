@@ -45,7 +45,7 @@ export default class extends Task {
 			} catch (err) {
 				console.error(err);
 			} finally {
-				this.client.grandExchangeTicker = setTimeout(ticker, 5000);
+				this.client.grandExchangeTicker = setTimeout(ticker, 5_000);
 			}
 		};
 		const tickerUpdate = async () => {
@@ -54,7 +54,7 @@ export default class extends Task {
 			} catch (err) {
 				console.error(err);
 			} finally {
-				this.client.grandExchangeUpdateTicker = setTimeout(ticker, 60000);
+				this.client.grandExchangeUpdateTicker = setTimeout(tickerUpdate, 30_000);
 			}
 		};
 		ticker();
