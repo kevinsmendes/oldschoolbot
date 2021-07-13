@@ -67,6 +67,7 @@ export default class BankImageTask extends Task {
 	public borderCorner: Image | null = null;
 	public borderHorizontal: Image | null = null;
 	public borderVertical: Image | null = null;
+	public borderTitle: Image | null = null;
 
 	public constructor(store: TaskStore, file: string[], directory: string) {
 		super(store, file, directory, {});
@@ -112,6 +113,7 @@ export default class BankImageTask extends Task {
 		this.borderVertical = await canvasImageFromBuffer(
 			fs.readFileSync('./src/lib/resources/images/bank_border_v.png')
 		);
+		this.borderTitle = await canvasImageFromBuffer(fs.readFileSync('./src/lib/resources/images/bank_border_t.png'));
 	}
 
 	async cacheFiles() {
@@ -178,15 +180,6 @@ export default class BankImageTask extends Task {
 		ctx.fillRect(0, 0, canvas.width, this.borderHorizontal!.height);
 		ctx.restore();
 
-		// Draw title line
-		if (titleLine) {
-			ctx.save();
-			ctx.fillStyle = ctx.createPattern(this.borderHorizontal, 'repeat-x');
-			ctx.translate(this.borderVertical!.width, 27);
-			ctx.fillRect(0, 0, canvas.width, this.borderHorizontal!.height);
-			ctx.restore();
-		}
-
 		// Draw left border
 		ctx.save();
 		ctx.fillStyle = ctx.createPattern(this.borderVertical, 'repeat-y');
@@ -201,6 +194,15 @@ export default class BankImageTask extends Task {
 		ctx.scale(-1, 1);
 		ctx.fillRect(0, 0, this.borderVertical!.width, canvas.height);
 		ctx.restore();
+
+		// Draw title line
+		if (titleLine) {
+			ctx.save();
+			ctx.fillStyle = ctx.createPattern(this.borderHorizontal, 'repeat-x');
+			ctx.translate(this.borderVertical!.width - 1, 27);
+			ctx.fillRect(0, 0, canvas.width - this.borderVertical!.width * 2 + 2, this.borderTitle!.height);
+			ctx.restore();
+		}
 
 		// Draw corner borders
 		// Top left
